@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web By Van Hai</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            --primary: #6c5ce7;
+            --success: #2ed573;
+            --bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: var(--bg);
+            background-attachment: fixed;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        .quiz-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            width: 100%;
+            max-width: 500px;
+            padding: 30px;
+            border-radius: 30px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        .question-block {
+            text-align: left; background: white; padding: 20px;
+            border-radius: 20px; margin-bottom: 25px; border: 1px solid #eee;
+        }
+        .options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        .option {
+            padding: 12px; border: 2px solid #f1f2f6; border-radius: 12px;
+            cursor: pointer; transition: 0.3s; text-align: center; background: #fff; font-size: 14px;
+        }
+        .option.selected { background: var(--primary); border-color: var(--primary); color: white; }
+        .option.locked { cursor: not-allowed; opacity: 0.7; }
+
+        input[type="text"] {
+            width: 100%; padding: 15px; border: 2px solid #eee; border-radius: 12px;
+            box-sizing: border-box; font-size: 16px; margin-bottom: 20px; outline: none;
+        }
+
+        #submit {
+            width: 100%; padding: 18px; background: var(--primary); color: white;
+            border: none; border-radius: 15px; font-size: 18px; font-weight: bold; cursor: pointer;
+        }
+
+        #result-screen { display: none; animation: fadeIn 0.8s ease; }
+        .success-icon { font-size: 80px; color: var(--success); margin-bottom: 10px; }
+        .score-text { font-size: 40px; font-weight: bold; color: #2d3436; }
+        .comment-text { font-size: 22px; color: var(--primary); font-weight: 600; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="quiz-container">
+    <div id="quiz-wrapper">
+        <h1 style="color: var(--primary);">✨ Web By Van Hai ✨</h1>
+        <form name="ket-qua-trac-nghiem" method="POST" data-netlify="true" id="quiz-form">
+            <input type="hidden" name="form-name" value="ket-qua-trac-nghiem" />
+            <input type="text" name="ten_nguoi_choi" id="username" placeholder="Nhập tên của bạn..." required>
+            <input type="hidden" name="so_diem" id="score-input">
+            <div id="quiz-content"></div>
+            <button type="button" id="submit" onclick="calculateScore()">Gửi kết quả ngay 🚀</button>
+        </form>
+    </div>
+
+    <div id="result-screen">
+        <div class="success-icon">✓</div>
+        <h2>Hoàn thành thành công!</h2>
+        <div id="display-score" class="score-text">0/15</div>
+        <div id="comment" class="comment-text"></div>
+        <p style="color: #666; margin-top: 20px;">Kết quả đã được gửi tới chủ nhân!</p>
+    </div>
+</div>
+
+<script>
+    // Đáp án đúng theo yêu cầu của bạn (Vị trí 0, 1, 2, 3)
+    const DAP_AN_CUA_TOI = [0, 3, 0, 0, 2, 0, 1, 2, 3, 0, 3, 3, 1, 3, 1]; 
+
+    const questions = [
+        { q: "Mình thích làm gì nhất khi rảnh?", a: ["Xem phim", "Ngủ", "Đi chơi", "Đọc sách"] },
+        { q: "Đồ uống 'chân ái' của mình?", a: ["Cà phê", "Trà sữa", "Nước ép", "Nước lọc"] },
+        { q: "Gu ăn uống của mình?", a: ["Vị Cay", "Vị Ngọt", "Vị Chua", "Vị Mặn"] },
+        { q: "Thời tiết mình thích nhất?", a: ["Nắng ráo", "Se lạnh", "Mưa bay", "Tuyết rơi"] },
+        { q: "Địa điểm mình muốn đi nhất?", a: ["Thành phố", "Vùng núi", "Bãi biển", "Đồng quê"] },
+        { q: "Mình ghét nhất điều gì?", a: ["Giả dối, hứa phạm", "Trễ hẹn", "Ồn ào", "Khoe khoang"] },
+        { q: "Tin nhắn làm mình khó chịu nhất?", a: ["Cụt lủn", "Xem đéo rep", "Spam nhiều", "Chỉ gửi icon"] },
+        { q: "Cảm giác mình sợ nhất?", a: ["Cô đơn", "Bận rộn", "Chờ đợi", "Gò bó"] },
+        { q: "Điều mình coi trọng nhất khi yêu?", a: ["Tin tưởng", "Quan tâm", "Chân thành", "Cả 3 phương án"] },
+        { q: "Mình ghét điều gì nhất trong tình yêu?", a: ["Qua lại nyc 😒", "Vô tâm", "Kiểm soát", "Lừa dối"] },
+        { q: "Cách mình bày tỏ tình cảm?", a: ["Tặng quà", "Hành động", "Lời nói", "Đụng chạm"] },
+        { q: "Gu người yêu của mình?", a: ["Hài hước", "Lạnh lùng", "Tử tế", "Hiền + Cá tính"] },
+        { q: "Khi cãi nhau mình sẽ?", a: ["Im lặng", "Giải thích", "Khóc", "Xin lỗi"] },
+        { q: "Nỗi sợ lớn nhất khi yêu?", a: ["Phản bội", "Nhạt nhẽo", "Áp lực", "Nhạt + Chia tay"] },
+        { q: "Mình tin vào điều gì nhất?", a: ["Duyên số", "Nỗ lực", "Cảm xúc", "Vật chất"] }
+    ];
+
+    let userChoices = new Array(questions.length).fill(null);
+    const container = document.getElementById('quiz-content');
+
+    window.onload = () => {
+        if (localStorage.getItem('quiz_done')) {
+            showResultScreen(localStorage.getItem('quiz_score'));
+        }
+    };
+
+    questions.forEach((item, index) => {
+        const block = document.createElement('div');
+        block.className = 'question-block';
+        block.innerHTML = `<strong>${index + 1}. ${item.q}</strong>`;
+        const optsDiv = document.createElement('div');
+        optsDiv.className = 'options';
+        item.a.forEach((opt, optIndex) => {
+            const btn = document.createElement('div');
+            btn.className = 'option';
+            btn.innerText = opt;
+            btn.onclick = () => {
+                if (userChoices[index] !== null) return;
+                userChoices[index] = optIndex;
+                btn.classList.add('selected');
+                Array.from(optsDiv.children).forEach(c => c.classList.add('locked'));
+            };
+            optsDiv.appendChild(btn);
+        });
+        block.appendChild(optsDiv);
+        container.appendChild(block);
+    });
+
+    function calculateScore() {
+        const name = document.getElementById('username').value.trim();
+        if (!name) return alert("Vui lòng nhập tên!");
+        if (!userChoices.every(c => c !== null)) return alert("Vui lòng hoàn thành 15 câu hỏi!");
+
+        let score = 0;
+        userChoices.forEach((choice, i) => { if (choice === DAP_AN_CUA_TOI[i]) score++; });
+        const finalScore = `${score}/${questions.length}`;
+
+        localStorage.setItem('quiz_done', 'true');
+        localStorage.setItem('quiz_score', finalScore);
+        document.getElementById('score-input').value = finalScore;
+        
+        // Gửi Form lên Netlify
+        const form = document.getElementById('quiz-form');
+        const formData = new FormData(form);
+        fetch("/", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams(formData).toString(),
+        });
+
+        confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+        showResultScreen(finalScore, score);
+    }
+
+    function showResultScreen(scoreStr, scoreNum) {
+        if (scoreNum === undefined) scoreNum = parseInt(scoreStr.split('/')[0]);
+        document.getElementById('quiz-wrapper').style.display = 'none';
+        document.getElementById('result-screen').style.display = 'block';
+        document.getElementById('display-score').innerText = scoreStr;
+
+        let comment = "";
+        if (scoreNum < 6) comment = "Biết ngay mà! 😂";
+        else if (scoreNum >= 6 && scoreNum <= 10) comment = "Tạm chấp nhận! 🙄";
+        else if (scoreNum > 10 && scoreNum < 15) comment = "Ừ được! 👍";
+        else if (scoreNum === 15) comment = "Giỏi đấy! ❤️";
+        document.getElementById('comment').innerText = comment;
+    }
+</script>
+</body>
+</html>
